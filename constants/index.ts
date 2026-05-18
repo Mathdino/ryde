@@ -30,6 +30,9 @@ import noResult from "@/assets/images/no-result.png";
 import onboarding1 from "@/assets/images/onboarding1.png";
 import onboarding2 from "@/assets/images/onboarding2.png";
 import onboarding3 from "@/assets/images/onboarding3.png";
+const onboarding1Video = require("@/assets/images/onboarding1.mp4");
+const onboarding2Video = require("@/assets/images/onboarding2.mp4");
+const onboarding3Video = require("@/assets/images/onboarding3.mp4");
 import signUpCar from "@/assets/images/signup-car.png";
 
 export const images = {
@@ -78,6 +81,7 @@ export const onboarding = [
     description:
       "Sua jornada começa com a Ryde. Encontre sua corrida ideal com facilidade.",
     image: images.onboarding1,
+    video: onboarding1Video,
   },
   {
     id: 2,
@@ -85,12 +89,14 @@ export const onboarding = [
     description:
       "Descubra a praticidade de encontrar a corrida perfeita com a Ryde.",
     image: images.onboarding2,
+    video: onboarding2Video,
   },
   {
     id: 3,
     title: "Sua corrida, do seu jeito. Vamos lá!",
     description: "Digite seu destino, relaxe e deixe o resto com a gente.",
     image: images.onboarding3,
+    video: onboarding3Video,
   },
 ];
 
