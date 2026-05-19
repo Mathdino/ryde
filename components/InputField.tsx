@@ -1,10 +1,12 @@
 import { InputFieldProps } from "@/types/type";
-import React from "react";
+import { Ionicons } from "@expo/vector-icons";
+import React, { useState } from "react";
 import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   Text,
   TextInput,
   TouchableWithoutFeedback,
@@ -22,6 +24,8 @@ const InputField = ({
   className,
   ...props
 }: InputFieldProps) => {
+  const [hidden, setHidden] = useState(secureTextEntry);
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -39,9 +43,22 @@ const InputField = ({
             )}
             <TextInput
               className={`rounded-full p-4 font-JakartaSemiBold text-[15px] flex-1 text-left ${inputStyle}`}
-              secureTextEntry={secureTextEntry}
+              secureTextEntry={hidden}
               {...props}
             />
+            {secureTextEntry && (
+              <Pressable
+                onPress={() => setHidden((v) => !v)}
+                hitSlop={10}
+                className="pr-4 pl-2"
+              >
+                <Ionicons
+                  name={hidden ? "eye-off-outline" : "eye-outline"}
+                  size={22}
+                  color="#666"
+                />
+              </Pressable>
+            )}
           </View>
         </View>
       </TouchableWithoutFeedback>

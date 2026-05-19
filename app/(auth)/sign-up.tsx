@@ -2,6 +2,7 @@ import CustomButton from "@/components/CustomButton";
 import InputField from "@/components/InputField";
 import OAuth from "@/components/OAuth";
 import { icons, images } from "@/constants";
+import { fetchAPI } from "@/lib/fetch";
 import { useAuth } from "@clerk/expo";
 import { useSignUp } from "@clerk/expo/legacy";
 import { Link, router } from "expo-router";
@@ -11,9 +12,15 @@ import ReactNativeModal from "react-native-modal";
 
 const SignUp = () => {
   const { isLoaded, signUp, setActive } = useSignUp();
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const auth = useAuth();
   React.useEffect(() => {
-    console.log("[SignUp] mount. useSignUp =", { isLoaded, hasSignUp: !!signUp }, "useAuth =", { isLoaded: auth.isLoaded, isSignedIn: auth.isSignedIn });
+    console.log(
+      "[SignUp] mount. useSignUp =",
+      { isLoaded, hasSignUp: !!signUp },
+      "useAuth =",
+      { isLoaded: auth.isLoaded, isSignedIn: auth.isSignedIn },
+    );
   }, [isLoaded, signUp, auth.isLoaded, auth.isSignedIn]);
 
   const [form, setForm] = useState({
@@ -29,9 +36,17 @@ const SignUp = () => {
   });
 
   const onSignUpPress = async () => {
-    console.log("[SignUp] Botão clicado. isLoaded =", isLoaded, "hasSignUp =", !!signUp);
+    console.log(
+      "[SignUp] Botão clicado. isLoaded =",
+      isLoaded,
+      "hasSignUp =",
+      !!signUp,
+    );
     if (!signUp) {
-      Alert.alert("Aguarde", "Clerk ainda está carregando. Tente de novo em 1s.");
+      Alert.alert(
+        "Aguarde",
+        "Clerk ainda está carregando. Tente de novo em 1s.",
+      );
       return;
     }
     try {
@@ -65,14 +80,15 @@ const SignUp = () => {
         code: verification.code,
       });
       if (completeSignUp.status === "complete") {
-        // await fetchAPI("/(api)/user", {
-        //   method: "POST",
-        //   body: JSON.stringify({
-        //     name: form.name,
-        //     email: form.email,
-        //     clerkId: completeSignUp.createdUserId,
-        //   }),
-        // });
+        await fetchAPI("/(api)/user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: form.name,
+            email: form.email,
+            clerkId: completeSignUp.createdUserId,
+          }),
+        });
         await setActive({ session: completeSignUp.createdSessionId });
         setVerification({
           ...verification,
@@ -165,31 +181,43 @@ const SignUp = () => {
 
         <ReactNativeModal
           isVisible={verification.state === "pending"}
+          onModalHide={() => {
+            if (verification.state === "success") setShowSuccessModal(true);
+          }}
         >
           <View className="bg-white px-7 py-9 rounded-2xl min-h-[300px]">
-            <Text className='text-2xl font-JakartaExtraBold mb-2'>
+            <Text className="text-2xl font-JakartaExtraBold mb-2">
               Verificação
             </Text>
-            <Text className='font-Jakarta mb-5'>
+            <Text className="font-Jakarta mb-5">
               Nós enviamos um código de verificação para {form.email}
             </Text>
-            <InputField label='Code' icon={icons.lock}  placeholder='12345' value={verification.code} keyboardType='numeric' onChangeText={(code) => setVerification({...verification, code})}/>
+            <InputField
+              label="Code"
+              icon={icons.lock}
+              placeholder="12345"
+              value={verification.code}
+              keyboardType="numeric"
+              onChangeText={(code) =>
+                setVerification({ ...verification, code })
+              }
+            />
 
             {verification.error && (
-              <Text className='text-red-500 font-Jakarta text-sm mt-1'>
+              <Text className="text-red-500 font-Jakarta text-sm mt-1">
                 {verification.error}
               </Text>
             )}
 
-          <CustomButton
-            title="Verificar Email"
-            onPress={onPressVerify}
-            className="mt-5 bg-success-500"
-          />
+            <CustomButton
+              title="Verificar Email"
+              onPress={onPressVerify}
+              className="mt-5 bg-success-500"
+            />
           </View>
         </ReactNativeModal>
 
-        <ReactNativeModal isVisible={verification.state === "success"}>
+        <ReactNativeModal isVisible={showSuccessModal}>
           <View className="bg-white px-7 py-9 rounded-2xl min-h-[300px]">
             <Image
               source={images.check}
@@ -206,7 +234,10 @@ const SignUp = () => {
 
             <CustomButton
               title="Ir para home"
-              onPress={() => router.replace("/(root)/(tabs)/home")}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.push("/(root)/(tabs)/home");
+              }}
               className="mt-5"
             />
           </View>
