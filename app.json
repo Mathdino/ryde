@@ -52,7 +52,13 @@
       ],
       "@clerk/expo",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Permita que o Ryde use sua localização para mostrar o mapa e calcular rotas."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
