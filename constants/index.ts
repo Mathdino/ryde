@@ -18,6 +18,7 @@ import person from "@/assets/icons/person.png";
 import pin from "@/assets/icons/pin.png";
 import point from "@/assets/icons/point.png";
 import profile from "@/assets/icons/profile.png";
+import real from "@/assets/icons/real.png";
 import search from "@/assets/icons/search.png";
 import selectedMarker from "@/assets/icons/selected-marker.png";
 import star from "@/assets/icons/star.png";
@@ -30,10 +31,10 @@ import noResult from "@/assets/images/no-result.png";
 import onboarding1 from "@/assets/images/onboarding1.png";
 import onboarding2 from "@/assets/images/onboarding2.png";
 import onboarding3 from "@/assets/images/onboarding3.png";
+import signUpCar from "@/assets/images/signup-car.png";
 const onboarding1Video = require("@/assets/images/onboarding1.mp4");
 const onboarding2Video = require("@/assets/images/onboarding2.mp4");
 const onboarding3Video = require("@/assets/images/onboarding3.mp4");
-import signUpCar from "@/assets/images/signup-car.png";
 
 export const images = {
   onboarding1,
@@ -54,6 +55,7 @@ export const icons = {
   checkmark,
   close,
   dollar,
+  real,
   email,
   eyecross,
   google,

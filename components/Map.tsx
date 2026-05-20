@@ -1,88 +1,56 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
-import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
-import MapViewDirections from "react-native-maps-directions";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, Image, Text, View } from "react-native";
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
 
 import { icons } from "@/constants";
+import { useFetch } from "@/lib/fetch";
 import {
   calculateDriverTimes,
   calculateRegion,
+  fetchRouteCoordinates,
   generateMarkersFromData,
 } from "@/lib/map";
 import { useDriverStore, useLocationStore } from "@/store";
 import { Driver, MarkerData } from "@/types/type";
 
-const directionsAPI = process.env.EXPO_PUBLIC_DIRECTIONS_API_KEY;
+type Coordinate = { latitude: number; longitude: number };
 
-const MOCK_DRIVERS: Driver[] = [
-  {
-    driver_id: 1,
-    first_name: "James",
-    last_name: "Wilson",
-    profile_image_url:
-      "https://ucarecdn.com/dae59f69-2c1f-48c3-a883-017bcf0f9950/-/preview/1000x666/",
-    car_image_url:
-      "https://ucarecdn.com/a2dc52b2-8bf7-4e49-9a36-3ffb5229ed02/-/preview/465x466/",
-    car_seats: 4,
-    rating: 4.8,
-  },
-  {
-    driver_id: 2,
-    first_name: "David",
-    last_name: "Brown",
-    profile_image_url:
-      "https://ucarecdn.com/6ea6d83d-ef1a-483f-9106-837a3a5b3f67/-/preview/1000x666/",
-    car_image_url:
-      "https://ucarecdn.com/a3872f80-c094-409c-82f8-c9ff38429327/-/preview/930x932/",
-    car_seats: 5,
-    rating: 4.6,
-  },
-  {
-    driver_id: 3,
-    first_name: "Michael",
-    last_name: "Johnson",
-    profile_image_url:
-      "https://ucarecdn.com/0330d85c-232e-4c30-bd04-e5e4d0e3d688/-/preview/826x822/",
-    car_image_url:
-      "https://ucarecdn.com/289764fb-55b6-4427-b1d1-f655987b4a14/-/preview/930x932/",
-    car_seats: 4,
-    rating: 4.7,
-  },
-  {
-    driver_id: 4,
-    first_name: "Robert",
-    last_name: "Green",
-    profile_image_url:
-      "https://ucarecdn.com/fdfc54df-9d24-40f7-b7d3-6f391561c0db/-/preview/626x417/",
-    car_image_url:
-      "https://ucarecdn.com/b6fb3b55-7676-4ff3-8484-fb115e130097/-/preview/930x932/",
-    car_seats: 4,
-    rating: 4.9,
-  },
-];
+const googleAPI = process.env.EXPO_PUBLIC_GOOGLE_API_KEY ?? "";
 
-const Map = () => {
+const Map = ({ showRoutes = false }: { showRoutes?: boolean }) => {
+  const {
+    data: fetchedDrivers,
+    loading,
+    error,
+  } = useFetch<Driver[]>("/(api)/driver");
+
   const {
     userLongitude,
     userLatitude,
     destinationLatitude,
     destinationLongitude,
   } = useLocationStore();
-  const { selectedDriver, setDrivers } = useDriverStore();
+
+  const {
+    selectedDriver,
+    setDrivers,
+    drivers: storedDrivers,
+  } = useDriverStore();
+
   const [markers, setMarkers] = useState<MarkerData[]>([]);
+  const [driverRoute, setDriverRoute] = useState<Coordinate[]>([]);
+  const [destinationRoute, setDestinationRoute] = useState<Coordinate[]>([]);
 
-  // Gera markers ao redor do usuário usando mocks
+  // Gera markers ao redor do usuário com os motoristas do banco
   useEffect(() => {
-    if (!userLatitude || !userLongitude) return;
-
+    if (!userLatitude || !userLongitude || !fetchedDrivers?.length) return;
     const newMarkers = generateMarkersFromData({
-      data: MOCK_DRIVERS,
+      data: fetchedDrivers,
       userLatitude,
       userLongitude,
     });
-
     setMarkers(newMarkers);
-  }, [userLatitude, userLongitude]);
+  }, [userLatitude, userLongitude, fetchedDrivers]);
 
   // Calcula tempos quando houver destino
   useEffect(() => {
@@ -103,6 +71,47 @@ const Map = () => {
     }
   }, [markers, destinationLatitude, destinationLongitude]);
 
+  // Rota do motorista selecionado → usuário
+  useEffect(() => {
+    const selectedMarker =
+      markers.find((m) => m.id === selectedDriver) ??
+      storedDrivers.find((m) => m.id === selectedDriver);
+
+    if (!selectedMarker || !userLatitude || !userLongitude) {
+      setDriverRoute([]);
+      return;
+    }
+
+    fetchRouteCoordinates(
+      selectedMarker.latitude,
+      selectedMarker.longitude,
+      userLatitude,
+      userLongitude,
+      googleAPI,
+    ).then(setDriverRoute);
+  }, [selectedDriver, markers, storedDrivers, userLatitude, userLongitude]);
+
+  // Rota do usuário → destino
+  useEffect(() => {
+    if (
+      !userLatitude ||
+      !userLongitude ||
+      !destinationLatitude ||
+      !destinationLongitude
+    ) {
+      setDestinationRoute([]);
+      return;
+    }
+
+    fetchRouteCoordinates(
+      userLatitude,
+      userLongitude,
+      destinationLatitude,
+      destinationLongitude,
+      googleAPI,
+    ).then(setDestinationRoute);
+  }, [userLatitude, userLongitude, destinationLatitude, destinationLongitude]);
+
   const region = calculateRegion({
     userLatitude,
     userLongitude,
@@ -110,10 +119,18 @@ const Map = () => {
     destinationLongitude,
   });
 
-  if (!userLatitude || !userLongitude) {
+  if (loading || !userLatitude || !userLongitude) {
     return (
       <View className="flex-1 justify-center items-center">
         <ActivityIndicator size="small" color="#000" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View className="flex-1 justify-center items-center">
+        <Text>Erro ao carregar mapa</Text>
       </View>
     );
   }
@@ -125,9 +142,43 @@ const Map = () => {
       tintColor="black"
       showsPointsOfInterest={false}
       initialRegion={region}
-      showsUserLocation
+      showsUserLocation={false}
       userInterfaceStyle="light"
     >
+      {/* Ícone de pessoa na posição do usuário */}
+      {userLatitude && userLongitude && (
+        <Marker
+          key="user"
+          coordinate={{ latitude: userLatitude, longitude: userLongitude }}
+          title="Você"
+        >
+          <View
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 20,
+              backgroundColor: "#0286FF",
+              alignItems: "center",
+              justifyContent: "center",
+              borderWidth: 3,
+              borderColor: "#fff",
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.3,
+              shadowRadius: 4,
+              elevation: 5,
+            }}
+          >
+            <Image
+              source={icons.person}
+              style={{ width: 24, height: 24, tintColor: "#fff" }}
+              resizeMode="contain"
+            />
+          </View>
+        </Marker>
+      )}
+
+      {/* Markers dos motoristas */}
       {markers.map((marker) => (
         <Marker
           key={marker.id}
@@ -137,32 +188,42 @@ const Map = () => {
           }}
           title={marker.title}
           image={
-            selectedDriver === +marker.id ? icons.selectedMarker : icons.marker
+            selectedDriver === marker.id ? icons.selectedMarker : icons.marker
           }
         />
       ))}
 
-      {destinationLatitude && destinationLongitude && (
+      {/* Linhas e destino — apenas nas telas de corrida */}
+      {showRoutes && (
         <>
-          <Marker
-            key="destination"
-            coordinate={{
-              latitude: destinationLatitude,
-              longitude: destinationLongitude,
-            }}
-            title="Destino"
-            image={icons.pin}
-          />
-          {directionsAPI && (
-            <MapViewDirections
-              origin={{ latitude: userLatitude!, longitude: userLongitude! }}
-              destination={{
+          {/* Linha azul: motorista selecionado → usuário */}
+          {driverRoute.length >= 2 && (
+            <Polyline
+              coordinates={driverRoute}
+              strokeColor="#0286FF"
+              strokeWidth={4}
+            />
+          )}
+
+          {/* Marker do destino */}
+          {destinationLatitude && destinationLongitude && (
+            <Marker
+              key="destination"
+              coordinate={{
                 latitude: destinationLatitude,
                 longitude: destinationLongitude,
               }}
-              apikey={directionsAPI}
-              strokeColor="#0286FF"
-              strokeWidth={2}
+              title="Destino"
+              image={icons.pin}
+            />
+          )}
+
+          {/* Linha laranja: usuário → destino */}
+          {destinationRoute.length >= 2 && (
+            <Polyline
+              coordinates={destinationRoute}
+              strokeColor="#FF6B00"
+              strokeWidth={4}
             />
           )}
         </>
