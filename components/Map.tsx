@@ -1,3 +1,4 @@
+import { useUser } from "@clerk/expo";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Platform, View } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
@@ -25,6 +26,9 @@ const DEFAULT_REGION = {
 const Map = () => {
   const mapRef = useRef<MapView>(null);
   const [mapReady, setMapReady] = useState(false);
+  const { user } = useUser();
+  const userImageUrl =
+    user?.externalAccounts[0]?.imageUrl ?? user?.imageUrl ?? null;
 
   const {
     userLatitude,
@@ -108,24 +112,51 @@ const Map = () => {
             coordinate={{ latitude: userLatitude, longitude: userLongitude }}
             title="Você"
           >
+            {/* View externo: sombra */}
             <View
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                backgroundColor: "#0286FF",
-                alignItems: "center",
-                justifyContent: "center",
-                borderWidth: 3,
-                borderColor: "#fff",
-                elevation: 5,
+                elevation: 6,
+                shadowColor: "#000",
+                shadowOpacity: 0.3,
+                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 2 },
+                borderRadius: 23,
               }}
             >
-              <Image
-                source={icons.person}
-                style={{ width: 18, height: 18, tintColor: "#fff" }}
-                resizeMode="contain"
-              />
+              {/* View interno: borda branca + clip circular */}
+              <View
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  borderRadius: 20,
+                  borderWidth: 3,
+                  borderColor: "#fff",
+                  overflow: "hidden",
+                  backgroundColor: "#0286FF",
+                }}
+              >
+                {userImageUrl ? (
+                  <Image
+                    source={{ uri: userImageUrl }}
+                    style={{ width: 30, height: 30 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View
+                    style={{
+                      flex: 1,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Image
+                      source={icons.person}
+                      style={{ width: 22, height: 22, tintColor: "#fff" }}
+                      resizeMode="contain"
+                    />
+                  </View>
+                )}
+              </View>
             </View>
           </Marker>
         )}
@@ -140,7 +171,9 @@ const Map = () => {
             }}
             title={marker.title}
             image={
-              selectedDriver === +marker.id ? icons.selectedMarker : icons.marker
+              selectedDriver === +marker.id
+                ? icons.selectedMarker
+                : icons.marker
             }
           />
         ))}
