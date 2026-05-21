@@ -38,7 +38,7 @@ const RideCard = ({
             </View>
             <View className="flex flex-row items-center gap-x-2">
               <Image source={icons.point} className="w-5 h-5" />
-              <Text className="text-md font-JakartaMedium">
+              <Text className="text-md font-JakartaMedium" numberOfLines={1}>
                 {destination_address}
               </Text>
             </View>
@@ -68,9 +68,16 @@ const RideCard = ({
             <Text className="text-sm font-JakartaMedium text-gray-500">
               Carro
             </Text>
-            <Text className="text-sm font-JakartaMedium text-gray-500">
-              {driver.car} | {driver.car_seats} lugares
-            </Text>
+            <View className="flex flex-row items-center">
+              <Image
+                source={{ uri: driver.car_image_url }}
+                className="w-14 h-10"
+                resizeMode="contain"
+              />
+              <Text className="text-sm font-JakartaMedium text-gray-500">
+                | {driver.car_seats} lugares
+              </Text>
+            </View>
           </View>
 
           <View className="flex flex-row items-center justify-between w-full mb-5">

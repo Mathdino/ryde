@@ -2,7 +2,7 @@ import CustomButton from "@/components/CustomButton";
 import InputField from "@/components/InputField";
 import OAuth from "@/components/OAuth";
 import { icons, images } from "@/constants";
-import { fetchAPI } from "@/lib/fetch";
+import { fetchAPI, getServerUrl } from "@/lib/fetch";
 import { useAuth } from "@clerk/expo";
 import { useSignUp } from "@clerk/expo/legacy";
 import { Link, router } from "expo-router";
@@ -80,7 +80,7 @@ const SignUp = () => {
         code: verification.code,
       });
       if (completeSignUp.status === "complete") {
-        await fetchAPI("/(api)/user", {
+        await fetchAPI(`${getServerUrl()}(api)/user`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

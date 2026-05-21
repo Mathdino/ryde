@@ -1,4 +1,4 @@
-import AddressTextInput from "@/components/AddressTextInput";
+import GoogleTextInput from "@/components/GoogleTextInput";
 import CustomButton from "@/components/CustomButton";
 import RideLayout from "@/components/RideLayout";
 import { icons } from "@/constants";
@@ -18,7 +18,7 @@ const FindRide = () => {
     <RideLayout title="Corrida" snapPoints={["85%"]}>
       <View className="my-3">
         <Text className="text-lg font-JakartaSemiBold mb-3">Origem</Text>
-        <AddressTextInput
+        <GoogleTextInput
           icon={icons.target}
           initialLocation={userAddress!}
           containerStyle="bg-neutral-100"
@@ -29,7 +29,7 @@ const FindRide = () => {
 
       <View className="my-3">
         <Text className="text-lg font-JakartaSemiBold mb-3">Destino</Text>
-        <AddressTextInput
+        <GoogleTextInput
           icon={icons.map}
           initialLocation={destinationAddress!}
           containerStyle="bg-neutral-100"

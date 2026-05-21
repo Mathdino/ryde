@@ -7,6 +7,7 @@ declare interface Driver {
   profile_image_url: string;
   car_image_url: string;
   car_seats: number;
+  car: string;
   rating: number;
 }
 
@@ -49,6 +50,7 @@ declare interface Ride {
   driver: {
     first_name: string;
     last_name: string;
+    car_image_url: string;
     car_seats: number;
     car: string;
   };

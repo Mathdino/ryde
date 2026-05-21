@@ -1,124 +1,56 @@
 import { Driver, MarkerData } from "@/types/type";
 
-type Coordinate = { latitude: number; longitude: number };
+const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_API_KEY ?? "";
 
-// Decodifica o polyline encoded do Google Directions API
-const decodePolyline = (encoded: string): Coordinate[] => {
-  const points: Coordinate[] = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-
-  while (index < encoded.length) {
-    let shift = 0;
-    let result = 0;
-    let byte: number;
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-    lat += result & 1 ? ~(result >> 1) : result >> 1;
-
-    shift = 0;
-    result = 0;
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-    lng += result & 1 ? ~(result >> 1) : result >> 1;
-
-    points.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
-  }
-  return points;
+// ─── Haversine — distância em km entre dois pontos ───────────────────────────
+const haversineDistance = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number => {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-// Busca as coordenadas reais da rota via Google Directions API
-// Caso falhe, retorna linha reta como fallback
-export const fetchRouteCoordinates = async (
+// ─── Tempo de percurso via Google Directions (fallback: haversine) ────────────
+const getGoogleDuration = async (
   originLat: number,
   originLon: number,
   destLat: number,
   destLon: number,
-  apiKey: string
-): Promise<Coordinate[]> => {
-  const straight: Coordinate[] = [
-    { latitude: originLat, longitude: originLon },
-    { latitude: destLat, longitude: destLon },
-  ];
-
+): Promise<number> => {
   try {
     const url =
       `https://maps.googleapis.com/maps/api/directions/json` +
       `?origin=${originLat},${originLon}` +
       `&destination=${destLat},${destLon}` +
-      `&key=${apiKey}`;
+      `&key=${GOOGLE_API_KEY}`;
 
     const res = await fetch(url);
     const data = await res.json();
 
-    if (data.status !== "OK" || !data.routes?.[0]?.overview_polyline?.points) {
-      return straight;
+    if (data.status === "OK" && data.routes?.[0]?.legs?.[0]?.duration?.value) {
+      return data.routes[0].legs[0].duration.value; // segundos
     }
 
-    return decodePolyline(data.routes[0].overview_polyline.points);
-  } catch {
-    return straight;
-  }
-};
-
-// Calcula distância em km entre dois pontos (fórmula Haversine)
-const haversineDistance = (
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number => {
-  const R = 6371; // raio da Terra em km
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
-
-// OSRM — roteamento gratuito, sem chave necessária
-// Usa haversine como fallback quando o OSRM não encontrar rota (ex: noRoute)
-const getOsrmDuration = async (
-  originLat: number,
-  originLon: number,
-  destLat: number,
-  destLon: number
-): Promise<number> => {
-  try {
-    const url =
-      `https://router.project-osrm.org/route/v1/driving/` +
-      `${originLon},${originLat};${destLon},${destLat}` +
-      `?overview=false`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    if (data.code === "Ok" && data.routes?.[0]) {
-      return data.routes[0].duration; // segundos
-    }
-
-    // Fallback: estima pela distância em linha reta a 40 km/h em área urbana
+    // Fallback: estima 40 km/h em área urbana
     const distKm = haversineDistance(originLat, originLon, destLat, destLon);
-    const avgSpeedKmH = 40;
-    return (distKm / avgSpeedKmH) * 3600; // converte para segundos
+    return (distKm / 40) * 3600;
   } catch {
-    // Sem conexão ou erro inesperado: fallback haversine
     const distKm = haversineDistance(originLat, originLon, destLat, destLon);
     return (distKm / 40) * 3600;
   }
 };
 
+// ─── Gera markers dos motoristas ao redor do usuário ─────────────────────────
 export const generateMarkersFromData = ({
   data,
   userLatitude,
@@ -129,19 +61,20 @@ export const generateMarkersFromData = ({
   userLongitude: number;
 }): MarkerData[] => {
   return data.map((driver) => {
-    const latOffset = (Math.random() - 0.5) * 0.01; // Random offset between -0.005 and 0.005
-    const lngOffset = (Math.random() - 0.5) * 0.01; // Random offset between -0.005 and 0.005
+    const latOffset = (Math.random() - 0.5) * 0.01;
+    const lngOffset = (Math.random() - 0.5) * 0.01;
 
     return {
+      ...driver,
+      id: driver.driver_id,           // MarkerData exige 'id', Driver tem 'driver_id'
       latitude: userLatitude + latOffset,
       longitude: userLongitude + lngOffset,
-      id: driver.driver_id,
       title: `${driver.first_name} ${driver.last_name}`,
-      ...driver,
     };
   });
 };
 
+// ─── Calcula região do mapa ───────────────────────────────────────────────────
 export const calculateRegion = ({
   userLatitude,
   userLongitude,
@@ -155,10 +88,10 @@ export const calculateRegion = ({
 }) => {
   if (!userLatitude || !userLongitude) {
     return {
-      latitude: 37.78825,
-      longitude: -122.4324,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
+      latitude: -23.5505,
+      longitude: -46.6333,
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
     };
   }
 
@@ -176,20 +109,15 @@ export const calculateRegion = ({
   const minLng = Math.min(userLongitude, destinationLongitude);
   const maxLng = Math.max(userLongitude, destinationLongitude);
 
-  const latitudeDelta = (maxLat - minLat) * 1.3; // Adding some padding
-  const longitudeDelta = (maxLng - minLng) * 1.3; // Adding some padding
-
-  const latitude = (userLatitude + destinationLatitude) / 2;
-  const longitude = (userLongitude + destinationLongitude) / 2;
-
   return {
-    latitude,
-    longitude,
-    latitudeDelta,
-    longitudeDelta,
+    latitude: (userLatitude + destinationLatitude) / 2,
+    longitude: (userLongitude + destinationLongitude) / 2,
+    latitudeDelta: (maxLat - minLat) * 1.3 || 0.01,
+    longitudeDelta: (maxLng - minLng) * 1.3 || 0.01,
   };
 };
 
+// ─── Calcula tempo e preço de cada motorista até o destino ───────────────────
 export const calculateDriverTimes = async ({
   markers,
   userLatitude,
@@ -213,18 +141,18 @@ export const calculateDriverTimes = async ({
 
   try {
     const timesPromises = markers.map(async (marker) => {
-      const timeToUser = await getOsrmDuration(
+      const timeToUser = await getGoogleDuration(
         marker.latitude,
         marker.longitude,
-        userLatitude!,
-        userLongitude!
+        userLatitude,
+        userLongitude,
       );
 
-      const timeToDestination = await getOsrmDuration(
-        userLatitude!,
-        userLongitude!,
-        destinationLatitude!,
-        destinationLongitude!
+      const timeToDestination = await getGoogleDuration(
+        userLatitude,
+        userLongitude,
+        destinationLatitude,
+        destinationLongitude,
       );
 
       const totalTime = (timeToUser + timeToDestination) / 60; // minutos
@@ -235,8 +163,8 @@ export const calculateDriverTimes = async ({
 
     return await Promise.all(timesPromises);
   } catch (error) {
-    console.error("Error calculating driver times:", error);
-    // Retorna markers sem tempo/preço em vez de crashar
+    console.error("Erro ao calcular tempos:", error);
+    // Retorna markers com valores estimados em vez de crashar
     return markers.map((marker) => ({
       ...marker,
       time: Math.floor(Math.random() * 15) + 5,

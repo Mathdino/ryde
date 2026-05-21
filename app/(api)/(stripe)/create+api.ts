@@ -4,9 +4,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 export async function POST(request: Request) {
   try {
-    const { name, email, amount, paymentMethodId } = await request.json();
+    const { name, email, amount } = await request.json();
 
-    if (!name || !email || !amount || !paymentMethodId) {
+    if (!name || !email || !amount) {
       return Response.json(
         { error: "Campos obrigatórios ausentes" },
         { status: 400 },
@@ -15,22 +15,21 @@ export async function POST(request: Request) {
 
     // Busca cliente existente ou cria um novo
     const existingCustomers = await stripe.customers.list({ email, limit: 1 });
-    let customer =
+    const customer =
       existingCustomers.data.length > 0
         ? existingCustomers.data[0]
         : await stripe.customers.create({ name, email });
 
-    // Vincula o método de pagamento ao cliente
-    await stripe.paymentMethods.attach(paymentMethodId, {
-      customer: customer.id,
-    });
-
-    // Cria o PaymentIntent
+    // Cria o PaymentIntent sem confirmar — o SDK do Stripe confirma client-side
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(parseFloat(amount) * 100),
-      currency: "usd",
+      currency: "brl",
       customer: customer.id,
-      payment_method: paymentMethodId,
+      description: "Pagamento de corrida com Ryde",
+      automatic_payment_methods: {
+        enabled: true,
+        allow_redirects: "never",
+      },
     });
 
     return Response.json({ paymentIntent, customer: customer.id });

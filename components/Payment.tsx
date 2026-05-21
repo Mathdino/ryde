@@ -7,7 +7,7 @@ import { ReactNativeModal } from "react-native-modal";
 
 import CustomButton from "@/components/CustomButton";
 import { images } from "@/constants";
-import { fetchAPI } from "@/lib/fetch";
+import { fetchAPI, getServerUrl } from "@/lib/fetch";
 import { useLocationStore } from "@/store";
 import { PaymentProps } from "@/types/type";
 
@@ -29,112 +29,85 @@ const Payment = ({
   } = useLocationStore();
 
   const { userId } = useAuth();
-  const [success, setSuccess] = useState<boolean>(false);
+  const [success, setSuccess] = useState(false);
 
   const openPaymentSheet = async () => {
-    const initError = await initializePaymentSheet();
-    if (initError) return;
+    // 1. Cria o PaymentIntent no servidor e inicializa o sheet
+    const clientSecret = await initializePaymentSheet();
+    if (!clientSecret) return;
 
+    // 2. Abre o sheet para o usuário preencher os dados do cartão
     const { error } = await presentPaymentSheet();
 
     if (error) {
-      Alert.alert(`Erro: ${error.code}`, error.message);
-    } else {
-      setSuccess(true);
+      Alert.alert(`Erro no pagamento: ${error.code}`, error.message);
+      return;
     }
+
+    // 3. Pagamento confirmado — salva a corrida no banco
+    try {
+      await fetchAPI(`${getServerUrl()}(api)/ride/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          origin_address: userAddress,
+          destination_address: destinationAddress,
+          origin_latitude: userLatitude,
+          origin_longitude: userLongitude,
+          destination_latitude: destinationLatitude,
+          destination_longitude: destinationLongitude,
+          ride_time: rideTime.toFixed(0),
+          fare_price: Math.round(parseFloat(amount) * 100),
+          payment_status: "Pago",
+          driver_id: driverId,
+          user_id: userId,
+        }),
+      });
+    } catch (dbError) {
+      console.error("Erro ao salvar corrida:", dbError);
+    }
+
+    setSuccess(true);
   };
 
-  const initializePaymentSheet = async () => {
-    const { error } = await initPaymentSheet({
-      merchantDisplayName: "Ryde",
-      intentConfiguration: {
-        mode: {
-          amount: Math.round(parseFloat(amount) * 100),
-          currencyCode: "usd",
-        },
-        confirmHandler: async (
-          paymentMethod,
-          _shouldSavePaymentMethod,
-          intentCreationCallback,
-        ) => {
-          try {
-            const { paymentIntent, customer } = await fetchAPI(
-              "/(api)/(stripe)/create",
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  name: fullName || email.split("@")[0],
-                  email,
-                  amount,
-                  paymentMethodId: paymentMethod.id,
-                }),
-              },
-            );
+  // Cria o PaymentIntent no servidor e devolve o client_secret
+  const initializePaymentSheet = async (): Promise<string | null> => {
+    try {
+      const response = await fetchAPI(`${getServerUrl()}(api)/(stripe)/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: fullName || email.split("@")[0],
+          email,
+          amount,
+        }),
+      });
 
-            if (!paymentIntent?.client_secret) {
-              intentCreationCallback({
-                error: { code: "Failed", message: "Falha ao criar pagamento." },
-              });
-              return;
-            }
+      const clientSecret = response?.paymentIntent?.client_secret;
 
-            const { result } = await fetchAPI("/(api)/(stripe)/pay", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                payment_method_id: paymentMethod.id,
-                payment_intent_id: paymentIntent.id,
-                customer_id: customer,
-                client_secret: paymentIntent.client_secret,
-              }),
-            });
+      if (!clientSecret) {
+        Alert.alert("Erro", "Não foi possível iniciar o pagamento.");
+        return null;
+      }
 
-            if (!result?.client_secret) {
-              intentCreationCallback({
-                error: {
-                  code: "Failed",
-                  message: "Falha ao confirmar pagamento.",
-                },
-              });
-              return;
-            }
+      const { error } = await initPaymentSheet({
+        merchantDisplayName: "Ryde",
+        paymentIntentClientSecret: clientSecret,
+        defaultBillingDetails: { name: fullName, email },
+        returnURL: "ryde://book-ride",
+      });
 
-            await fetchAPI("/(api)/ride/create", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                origin_address: userAddress,
-                destination_address: destinationAddress,
-                origin_latitude: userLatitude,
-                origin_longitude: userLongitude,
-                destination_latitude: destinationLatitude,
-                destination_longitude: destinationLongitude,
-                ride_time: rideTime.toFixed(0),
-                fare_price: Math.round(parseFloat(amount) * 100),
-                payment_status: "paid",
-                driver_id: driverId,
-                user_id: userId,
-              }),
-            });
+      if (error) {
+        Alert.alert("Erro ao carregar pagamento", error.message);
+        return null;
+      }
 
-            intentCreationCallback({ clientSecret: result.client_secret });
-          } catch (err: any) {
-            intentCreationCallback({
-              error: {
-                code: "Failed",
-                message: err?.message ?? "Erro inesperado no pagamento.",
-              },
-            });
-          }
-        },
-      },
-      returnURL: "ryde://book-ride",
-    });
-
-    if (error) {
-      Alert.alert(`Erro ao inicializar pagamento`, error.message);
-      return error;
+      return clientSecret;
+    } catch (err: any) {
+      const msg = err?.message ?? "Falha ao conectar ao servidor de pagamento.";
+      console.error("[Payment] initializePaymentSheet erro:", msg);
+      Alert.alert("Erro ao iniciar pagamento", msg);
+      return null;
     }
   };
 
@@ -154,18 +127,18 @@ const Payment = ({
           <Image source={images.check} className="w-28 h-28 mt-5" />
 
           <Text className="text-2xl text-center font-JakartaBold mt-5">
-            Corrida confirmada com sucesso
+            Corrida confirmada!
           </Text>
 
           <Text className="text-md text-general-200 font-JakartaRegular text-center mt-3">
-            Corrida confirmada com sucesso. Obrigado por usar a Ryde!
+            Obrigado por usar a Ryde!
           </Text>
 
           <CustomButton
             title="Voltar para home"
             onPress={() => {
               setSuccess(false);
-              router.push("/(root)/(tabs)/home");
+              router.replace("/(root)/(tabs)/home");
             }}
             className="mt-5"
           />

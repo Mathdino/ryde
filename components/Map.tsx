@@ -1,56 +1,67 @@
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Text, View } from "react-native";
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Image, Platform, View } from "react-native";
+import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
+import MapViewDirections from "react-native-maps-directions";
 
 import { icons } from "@/constants";
 import { useFetch } from "@/lib/fetch";
 import {
   calculateDriverTimes,
   calculateRegion,
-  fetchRouteCoordinates,
   generateMarkersFromData,
 } from "@/lib/map";
 import { useDriverStore, useLocationStore } from "@/store";
 import { Driver, MarkerData } from "@/types/type";
 
-type Coordinate = { latitude: number; longitude: number };
+const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_API_KEY ?? "";
 
-const googleAPI = process.env.EXPO_PUBLIC_GOOGLE_API_KEY ?? "";
+const DEFAULT_REGION = {
+  latitude: -23.5505,
+  longitude: -46.6333,
+  latitudeDelta: 0.05,
+  longitudeDelta: 0.05,
+};
 
-const Map = ({ showRoutes = false }: { showRoutes?: boolean }) => {
+const Map = () => {
+  const mapRef = useRef<MapView>(null);
+  const [mapReady, setMapReady] = useState(false);
+
   const {
-    data: fetchedDrivers,
-    loading,
-    error,
-  } = useFetch<Driver[]>("/(api)/driver");
-
-  const {
-    userLongitude,
     userLatitude,
+    userLongitude,
     destinationLatitude,
     destinationLongitude,
   } = useLocationStore();
 
-  const {
-    selectedDriver,
-    setDrivers,
-    drivers: storedDrivers,
-  } = useDriverStore();
-
+  const { selectedDriver, setDrivers } = useDriverStore();
+  const { data: drivers } = useFetch<Driver[]>("/(api)/driver");
   const [markers, setMarkers] = useState<MarkerData[]>([]);
-  const [driverRoute, setDriverRoute] = useState<Coordinate[]>([]);
-  const [destinationRoute, setDestinationRoute] = useState<Coordinate[]>([]);
 
-  // Gera markers ao redor do usuário com os motoristas do banco
+  // Anima o mapa para a localização do usuário quando disponível
   useEffect(() => {
-    if (!userLatitude || !userLongitude || !fetchedDrivers?.length) return;
+    if (mapReady && userLatitude && userLongitude) {
+      mapRef.current?.animateToRegion(
+        {
+          latitude: userLatitude,
+          longitude: userLongitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        },
+        600,
+      );
+    }
+  }, [mapReady, userLatitude, userLongitude]);
+
+  // Gera markers dos motoristas ao redor do usuário
+  useEffect(() => {
+    if (!Array.isArray(drivers) || !userLatitude || !userLongitude) return;
     const newMarkers = generateMarkersFromData({
-      data: fetchedDrivers,
+      data: drivers,
       userLatitude,
       userLongitude,
     });
     setMarkers(newMarkers);
-  }, [userLatitude, userLongitude, fetchedDrivers]);
+  }, [drivers, userLatitude, userLongitude]);
 
   // Calcula tempos quando houver destino
   useEffect(() => {
@@ -71,47 +82,6 @@ const Map = ({ showRoutes = false }: { showRoutes?: boolean }) => {
     }
   }, [markers, destinationLatitude, destinationLongitude]);
 
-  // Rota do motorista selecionado → usuário
-  useEffect(() => {
-    const selectedMarker =
-      markers.find((m) => m.id === selectedDriver) ??
-      storedDrivers.find((m) => m.id === selectedDriver);
-
-    if (!selectedMarker || !userLatitude || !userLongitude) {
-      setDriverRoute([]);
-      return;
-    }
-
-    fetchRouteCoordinates(
-      selectedMarker.latitude,
-      selectedMarker.longitude,
-      userLatitude,
-      userLongitude,
-      googleAPI,
-    ).then(setDriverRoute);
-  }, [selectedDriver, markers, storedDrivers, userLatitude, userLongitude]);
-
-  // Rota do usuário → destino
-  useEffect(() => {
-    if (
-      !userLatitude ||
-      !userLongitude ||
-      !destinationLatitude ||
-      !destinationLongitude
-    ) {
-      setDestinationRoute([]);
-      return;
-    }
-
-    fetchRouteCoordinates(
-      userLatitude,
-      userLongitude,
-      destinationLatitude,
-      destinationLongitude,
-      googleAPI,
-    ).then(setDestinationRoute);
-  }, [userLatitude, userLongitude, destinationLatitude, destinationLongitude]);
-
   const region = calculateRegion({
     userLatitude,
     userLongitude,
@@ -119,96 +89,66 @@ const Map = ({ showRoutes = false }: { showRoutes?: boolean }) => {
     destinationLongitude,
   });
 
-  if (loading || !userLatitude || !userLongitude) {
-    return (
-      <View className="flex-1 justify-center items-center">
-        <ActivityIndicator size="small" color="#000" />
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View className="flex-1 justify-center items-center">
-        <Text>Erro ao carregar mapa</Text>
-      </View>
-    );
-  }
-
   return (
-    <MapView
-      provider={PROVIDER_DEFAULT}
-      style={{ flex: 1, width: "100%", height: "100%", borderRadius: 16 }}
-      tintColor="black"
-      showsPointsOfInterest={false}
-      initialRegion={region}
-      showsUserLocation={false}
-      userInterfaceStyle="light"
-    >
-      {/* Ícone de pessoa na posição do usuário */}
-      {userLatitude && userLongitude && (
-        <Marker
-          key="user"
-          coordinate={{ latitude: userLatitude, longitude: userLongitude }}
-          title="Você"
-        >
-          <View
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 20,
-              backgroundColor: "#0286FF",
-              alignItems: "center",
-              justifyContent: "center",
-              borderWidth: 3,
-              borderColor: "#fff",
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.3,
-              shadowRadius: 4,
-              elevation: 5,
-            }}
+    <View style={{ flex: 1, width: "100%" }}>
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_DEFAULT}
+        style={{ flex: 1, width: "100%", borderRadius: 16 }}
+        mapType={Platform.OS === "android" ? "standard" : "mutedStandard"}
+        showsPointsOfInterest={false}
+        initialRegion={DEFAULT_REGION}
+        showsUserLocation={false}
+        userInterfaceStyle="light"
+        onMapReady={() => setMapReady(true)}
+      >
+        {/* Ícone do usuário */}
+        {userLatitude && userLongitude && (
+          <Marker
+            coordinate={{ latitude: userLatitude, longitude: userLongitude }}
+            title="Você"
           >
-            <Image
-              source={icons.person}
-              style={{ width: 24, height: 24, tintColor: "#fff" }}
-              resizeMode="contain"
-            />
-          </View>
-        </Marker>
-      )}
+            <View
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                backgroundColor: "#0286FF",
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: 3,
+                borderColor: "#fff",
+                elevation: 5,
+              }}
+            >
+              <Image
+                source={icons.person}
+                style={{ width: 18, height: 18, tintColor: "#fff" }}
+                resizeMode="contain"
+              />
+            </View>
+          </Marker>
+        )}
 
-      {/* Markers dos motoristas */}
-      {markers.map((marker) => (
-        <Marker
-          key={marker.id}
-          coordinate={{
-            latitude: marker.latitude,
-            longitude: marker.longitude,
-          }}
-          title={marker.title}
-          image={
-            selectedDriver === marker.id ? icons.selectedMarker : icons.marker
-          }
-        />
-      ))}
+        {/* Markers dos motoristas */}
+        {markers.map((marker) => (
+          <Marker
+            key={marker.id}
+            coordinate={{
+              latitude: marker.latitude,
+              longitude: marker.longitude,
+            }}
+            title={marker.title}
+            image={
+              selectedDriver === +marker.id ? icons.selectedMarker : icons.marker
+            }
+          />
+        ))}
 
-      {/* Linhas e destino — apenas nas telas de corrida */}
-      {showRoutes && (
-        <>
-          {/* Linha azul: motorista selecionado → usuário */}
-          {driverRoute.length >= 2 && (
-            <Polyline
-              coordinates={driverRoute}
-              strokeColor="#0286FF"
-              strokeWidth={4}
-            />
-          )}
-
-          {/* Marker do destino */}
-          {destinationLatitude && destinationLongitude && (
+        {/* Rota e marcador de destino */}
+        {destinationLatitude && destinationLongitude && (
+          <>
             <Marker
-              key="destination"
               coordinate={{
                 latitude: destinationLatitude,
                 longitude: destinationLongitude,
@@ -216,19 +156,40 @@ const Map = ({ showRoutes = false }: { showRoutes?: boolean }) => {
               title="Destino"
               image={icons.pin}
             />
-          )}
-
-          {/* Linha laranja: usuário → destino */}
-          {destinationRoute.length >= 2 && (
-            <Polyline
-              coordinates={destinationRoute}
-              strokeColor="#FF6B00"
-              strokeWidth={4}
+            <MapViewDirections
+              origin={{
+                latitude: userLatitude!,
+                longitude: userLongitude!,
+              }}
+              destination={{
+                latitude: destinationLatitude,
+                longitude: destinationLongitude,
+              }}
+              apikey={GOOGLE_API_KEY}
+              strokeColor="#0286FF"
+              strokeWidth={3}
             />
-          )}
-        </>
+          </>
+        )}
+      </MapView>
+
+      {/* Spinner sobreposto enquanto aguarda localização */}
+      {!userLatitude && !userLongitude && (
+        <View
+          style={{
+            position: "absolute",
+            top: 10,
+            alignSelf: "center",
+            backgroundColor: "rgba(255,255,255,0.9)",
+            borderRadius: 20,
+            paddingHorizontal: 14,
+            paddingVertical: 6,
+          }}
+        >
+          <ActivityIndicator size="small" color="#0286FF" />
+        </View>
       )}
-    </MapView>
+    </View>
   );
 };
 
