@@ -1,5 +1,6 @@
 import { ClerkLoaded, ClerkProvider } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
+import LoadingOverlay from "@/components/LoadingOverlay";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import "react-native-reanimated";
@@ -39,6 +40,7 @@ export default function RootLayout() {
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(root)" options={{ headerShown: false }} />
         </Stack>
+        <LoadingOverlay />
       </ClerkLoaded>
     </ClerkProvider>
   );

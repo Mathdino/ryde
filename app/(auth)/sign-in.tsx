@@ -6,9 +6,11 @@ import { useSignIn } from "@clerk/expo/legacy";
 import { Link, router } from "expo-router";
 import { useCallback, useState } from "react";
 import { Alert, Image, ScrollView, Text, View } from "react-native";
+import { useLoadingStore } from "@/store";
 
 const SignIn = () => {
   const { signIn, setActive, isLoaded } = useSignIn();
+  const { setLoading } = useLoadingStore();
 
   const [form, setForm] = useState({
     email: "",
@@ -24,6 +26,7 @@ const SignIn = () => {
       return;
     }
 
+    setLoading(true);
     try {
       const signInAttempt = await signIn.create({
         identifier: form.email,
@@ -34,7 +37,6 @@ const SignIn = () => {
         await setActive({ session: signInAttempt.createdSessionId });
         router.replace("/(root)/(tabs)/home");
       } else {
-        // See https://clerk.com/docs/custom-flows/error-handling for more info on error handling
         console.log(JSON.stringify(signInAttempt, null, 2));
         Alert.alert("Error", "Log in failed. Please try again.");
       }
@@ -46,6 +48,8 @@ const SignIn = () => {
         err?.message ||
         "Erro desconhecido ao entrar";
       Alert.alert("Error", message);
+    } finally {
+      setLoading(false);
     }
   }, [signIn, setActive, form]);
 

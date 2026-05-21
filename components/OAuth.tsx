@@ -1,10 +1,36 @@
 import CustomButton from "@/components/CustomButton";
 import { icons } from "@/constants";
+import { googleOAuth } from "@/lib/auth";
+import { useLoadingStore } from "@/store";
+import { useOAuth } from "@clerk/expo";
+import { router } from "expo-router";
 import React from "react";
-import { Image, Text, View } from "react-native";
+import { Alert, Image, Text, View } from "react-native";
 
 const OAuth = () => {
-  const handleGoogleSignIn = async () => {};
+  const { startOAuthFlow } = useOAuth({ strategy: "oauth_google" });
+  const { setLoading } = useLoadingStore();
+
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    try {
+      const result = await googleOAuth(startOAuthFlow);
+
+      if (result.code === "session_exists") {
+        Alert.alert(
+          "Success",
+          "Sua sessão já existe. Redirecionando para a tela inicial.",
+        );
+        router.replace("/(root)/(tabs)/home");
+        return;
+      }
+
+      Alert.alert(result.success ? "Success" : "Error", result.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View>
       <View className="flex flex-row justify-center items-center mt-4 gap-x-3">

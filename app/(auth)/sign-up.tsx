@@ -4,6 +4,7 @@ import OAuth from "@/components/OAuth";
 import { icons, images } from "@/constants";
 import { fetchAPI, getServerUrl } from "@/lib/fetch";
 import { useAuth } from "@clerk/expo";
+import { useLoadingStore } from "@/store";
 import { useSignUp } from "@clerk/expo/legacy";
 import { Link, router } from "expo-router";
 import React, { useState } from "react";
@@ -14,6 +15,7 @@ const SignUp = () => {
   const { isLoaded, signUp, setActive } = useSignUp();
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const auth = useAuth();
+  const { setLoading } = useLoadingStore();
   React.useEffect(() => {
     console.log(
       "[SignUp] mount. useSignUp =",
@@ -49,6 +51,7 @@ const SignUp = () => {
       );
       return;
     }
+    setLoading(true);
     try {
       await signUp.create({
         emailAddress: form.email,
@@ -56,25 +59,22 @@ const SignUp = () => {
       });
       await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
       console.log("[SignUp] prepare OK. Abrindo modal.");
-      setVerification({
-        ...verification,
-        state: "pending",
-      });
+      setVerification({ ...verification, state: "pending" });
     } catch (err: any) {
       console.log("[SignUp] ERRO:", JSON.stringify(err, null, 2));
-      // See https://clerk.com/docs/custom-flows/error-handling
-      // for more info on error handling
-      console.log(JSON.stringify(err, null, 2));
       const message =
         err?.errors?.[0]?.longMessage ||
         err?.errors?.[0]?.message ||
         err?.message ||
         "Erro desconhecido ao criar conta";
       Alert.alert("Error", message);
+    } finally {
+      setLoading(false);
     }
   };
   const onPressVerify = async () => {
     if (!signUp) return;
+    setLoading(true);
     try {
       const completeSignUp = await signUp.attemptEmailAddressVerification({
         code: verification.code,
@@ -102,13 +102,13 @@ const SignUp = () => {
         });
       }
     } catch (err: any) {
-      // See https://clerk.com/docs/custom-flows/error-handling
-      // for more info on error handling
       setVerification({
         ...verification,
         error: err.errors[0].longMessage,
         state: "failed",
       });
+    } finally {
+      setLoading(false);
     }
   };
 

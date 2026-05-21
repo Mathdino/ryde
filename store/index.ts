@@ -1,6 +1,17 @@
 import { DriverStore, LocationStore, MarkerData } from "@/types/type";
 import { create } from "zustand";
 
+// ─── Loading global ───────────────────────────────────────────────────────────
+interface LoadingStore {
+  isLoading: boolean;
+  setLoading: (value: boolean) => void;
+}
+
+export const useLoadingStore = create<LoadingStore>((set) => ({
+  isLoading: false,
+  setLoading: (isLoading) => set({ isLoading }),
+}));
+
 export const useLocationStore = create<LocationStore>((set) => ({
   userAddress: null,
   userLongitude: null,
